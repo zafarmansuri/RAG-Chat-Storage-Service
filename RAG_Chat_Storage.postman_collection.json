@@ -1,0 +1,2199 @@
+{
+  "info": {
+    "name": "RAG Chat Storage",
+    "description": "Complete end-to-end and corner-case test suite for the RAG Chat Storage Service.\n\n**Setup:** Set the collection variables `baseUrl`, `apiKey`, and `userId` before running.\n\n**Execution order:** Run the folders in sequence — the pre-request scripts and tests carry `sessionId` / `messageId` forward via collection variables so the full flow is chainable as a Collection Runner.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",   "value": "http://localhost:8080",  "type": "string" },
+    { "key": "apiKey",    "value": "change-me",              "type": "string" },
+    { "key": "userId",    "value": "postman-user",           "type": "string" },
+    { "key": "sessionId", "value": "",                       "type": "string" },
+    { "key": "messageId", "value": "",                       "type": "string" }
+  ],
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "key",   "value": "X-API-Key",      "type": "string" },
+      { "key": "value", "value": "{{apiKey}}",      "type": "string" },
+      { "key": "in",    "value": "header",          "type": "string" }
+    ]
+  },
+  "item": [
+
+    {
+      "name": "00 · Health",
+      "description": "Verify the service is up before running anything else.",
+      "item": [
+        {
+          "name": "GET health – 200 UP",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/health", "host": ["{{baseUrl}}"], "path": ["api","v1","health"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('status is UP', () => pm.expect(b.status).to.eql('UP'));",
+                "pm.test('has liveness field', () => pm.expect(b).to.have.property('liveness'));",
+                "pm.test('has readiness field', () => pm.expect(b).to.have.property('readiness'));",
+                "pm.test('has timestamp', () => pm.expect(b).to.have.property('timestamp'));"
+              ]}
+            }
+          ]
+        },
+        {
+          "name": "GET health – 401 missing API key",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/health", "host": ["{{baseUrl}}"], "path": ["api","v1","health"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 401', () => pm.response.to.have.status(401));",
+                "const b = pm.response.json();",
+                "pm.test('code is UNAUTHORIZED', () => pm.expect(b.code).to.eql('UNAUTHORIZED'));",
+                "pm.test('has path field', () => pm.expect(b).to.have.property('path'));"
+              ]}
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "01 · Sessions – Create",
+      "description": "POST /api/v1/sessions — all happy-path and validation edge cases.",
+      "item": [
+        {
+          "name": "POST session – 201 full payload",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('has id', () => pm.expect(b.id).to.be.a('string'));",
+                "pm.test('title matches', () => pm.expect(b.title).to.eql('My First RAG Session'));",
+                "pm.test('favorite is false', () => pm.expect(b.favorite).to.be.false);",
+                "pm.test('messageCount is 0', () => pm.expect(b.messageCount).to.eql(0));",
+                "pm.test('has createdAt', () => pm.expect(b.createdAt).to.be.a('string'));",
+                "pm.test('has updatedAt', () => pm.expect(b.updatedAt).to.be.a('string'));",
+                "pm.collectionVariables.set('sessionId', b.id);",
+                "console.log('Saved sessionId:', b.id);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"title\": \"My First RAG Session\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST session – 201 title omitted → defaults to Untitled Chat",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('default title applied', () => pm.expect(b.title).to.eql('Untitled Chat'));",
+                "pm.collectionVariables.set('sessionIdNoTitle', b.id);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST session – 201 title is null → defaults to Untitled Chat",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('default title applied', () => pm.expect(b.title).to.eql('Untitled Chat'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"title\": null\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST session – 201 title whitespace → defaults to Untitled Chat",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('default title applied', () => pm.expect(b.title).to.eql('Untitled Chat'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"title\": \"   \"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST session – 201 title with leading/trailing spaces → trimmed",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('title is trimmed', () => pm.expect(b.title).to.eql('Trimmed Title'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"title\": \"  Trimmed Title  \"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST session – 201 title exactly 255 chars (boundary)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('title length 255', () => pm.expect(b.title.length).to.eql(255));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"title\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST session – 400 title 256 chars (over boundary)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code VALIDATION_ERROR', () => pm.expect(b.code).to.eql('VALIDATION_ERROR'));",
+                "pm.test('message mentions title', () => pm.expect(b.message).to.include('title'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"title\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST session – 400 userId blank",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code VALIDATION_ERROR', () => pm.expect(b.code).to.eql('VALIDATION_ERROR'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"\",\n  \"title\": \"Test\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST session – 400 userId missing",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code VALIDATION_ERROR', () => pm.expect(b.code).to.eql('VALIDATION_ERROR'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST session – 400 userId exceeds 100 chars",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code VALIDATION_ERROR', () => pm.expect(b.code).to.eql('VALIDATION_ERROR'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu\",\n  \"title\": \"Test\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST session – 400 malformed JSON body",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code INVALID_REQUEST_BODY', () => pm.expect(b.code).to.eql('INVALID_REQUEST_BODY'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{userId: oops}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST session – 401 wrong API key",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 401', () => pm.response.to.have.status(401));",
+                "const b = pm.response.json();",
+                "pm.test('code UNAUTHORIZED', () => pm.expect(b.code).to.eql('UNAUTHORIZED'));"
+              ]}
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "totally-wrong-key" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"title\": \"Test\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST session – 401 no API key header",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 401', () => pm.response.to.have.status(401));",
+                "const b = pm.response.json();",
+                "pm.test('code UNAUTHORIZED', () => pm.expect(b.code).to.eql('UNAUTHORIZED'));"
+              ]}
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"title\": \"Test\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "02 · Sessions – List",
+      "description": "GET /api/v1/sessions — pagination, filtering, and edge cases.",
+      "item": [
+        {
+          "name": "GET sessions – 200 all sessions for user",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('has content array', () => pm.expect(b.content).to.be.an('array'));",
+                "pm.test('has page field', () => pm.expect(b).to.have.property('page'));",
+                "pm.test('has totalElements', () => pm.expect(b).to.have.property('totalElements'));",
+                "pm.test('has totalPages', () => pm.expect(b).to.have.property('totalPages'));",
+                "pm.test('has hasNext', () => pm.expect(b).to.have.property('hasNext'));",
+                "pm.test('page is 0', () => pm.expect(b.page).to.eql(0));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "GET sessions – 200 favorites only",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('all items are favorites', () => {",
+                "  b.content.forEach(s => pm.expect(s.favorite).to.be.true);",
+                "});"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}&favorite=true",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "favorite", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET sessions – 200 non-favorites only",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('all items are not favorites', () => {",
+                "  b.content.forEach(s => pm.expect(s.favorite).to.be.false);",
+                "});"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}&favorite=false",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "favorite", "value": "false" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET sessions – 200 page=0 size=1",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('size is 1', () => pm.expect(b.size).to.eql(1));",
+                "pm.test('at most 1 item', () => pm.expect(b.content.length).to.be.at.most(1));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}&page=0&size=1",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "page",   "value": "0" },
+                { "key": "size",   "value": "1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET sessions – 200 page=999 returns empty content (beyond last page)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('content is empty', () => pm.expect(b.content).to.be.an('array').that.is.empty);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}&page=999",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "page",   "value": "999" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET sessions – 200 unknown user returns empty list",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('content is empty', () => pm.expect(b.content).to.be.an('array').that.is.empty);",
+                "pm.test('totalElements is 0', () => pm.expect(b.totalElements).to.eql(0));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId=nobody-exists-xyz",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [{ "key": "userId", "value": "nobody-exists-xyz" }]
+            }
+          }
+        },
+        {
+          "name": "GET sessions – 400 userId missing",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code VALIDATION_ERROR', () => pm.expect(b.code).to.eql('VALIDATION_ERROR'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "GET sessions – 400 userId blank",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId=",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [{ "key": "userId", "value": "" }]
+            }
+          }
+        },
+        {
+          "name": "GET sessions – 400 size=0 (below min 1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}&size=0",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "size",   "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET sessions – 400 size=101 (above max 100)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}&size=101",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "size",   "value": "101" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET sessions – 400 page=-1 (below min 0)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}&page=-1",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "page",   "value": "-1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET sessions – 400 invalid page type",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code INVALID_PARAMETER', () => pm.expect(b.code).to.eql('INVALID_PARAMETER'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}&page=abc",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "page",   "value": "abc" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "03 · Sessions – Update",
+      "description": "PATCH /api/v1/sessions/{sessionId} — rename, favorite flag, ownership, and edge cases.",
+      "item": [
+        {
+          "name": "PATCH session – 200 rename only",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('title updated', () => pm.expect(b.title).to.eql('Renamed Session'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Renamed Session\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "PATCH session – 200 mark as favorite",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('favorite is true', () => pm.expect(b.favorite).to.be.true);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"favorite\": true\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "PATCH session – 200 unmark favorite",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('favorite is false', () => pm.expect(b.favorite).to.be.false);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"favorite\": false\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "PATCH session – 200 rename + favorite in one call",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('title updated', () => pm.expect(b.title).to.eql('Both Fields'));",
+                "pm.test('favorite true', () => pm.expect(b.favorite).to.be.true);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Both Fields\",\n  \"favorite\": true\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "PATCH session – 200 title with surrounding spaces → trimmed",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('title trimmed', () => pm.expect(b.title).to.eql('No Extra Spaces'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"  No Extra Spaces  \"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "PATCH session – 400 empty body (no fields)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('message mentions title or favorite', () => pm.expect(b.message).to.match(/title|favorite/i));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "PATCH session – 400 blank title string",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code BAD_REQUEST or VALIDATION_ERROR', () => pm.expect(['BAD_REQUEST','VALIDATION_ERROR']).to.include(b.code));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"   \"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "PATCH session – 400 title 256 chars",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "PATCH session – 404 wrong owner (different userId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 404', () => pm.response.to.have.status(404));",
+                "const b = pm.response.json();",
+                "pm.test('code RESOURCE_NOT_FOUND', () => pm.expect(b.code).to.eql('RESOURCE_NOT_FOUND'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Hacked\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}?userId=another-user-entirely",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}"],
+              "query": [{ "key": "userId", "value": "another-user-entirely" }]
+            }
+          }
+        },
+        {
+          "name": "PATCH session – 404 non-existent sessionId",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 404', () => pm.response.to.have.status(404));",
+                "const b = pm.response.json();",
+                "pm.test('code RESOURCE_NOT_FOUND', () => pm.expect(b.code).to.eql('RESOURCE_NOT_FOUND'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Ghost\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/00000000-0000-0000-0000-000000000000?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","00000000-0000-0000-0000-000000000000"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "PATCH session – 400 invalid UUID format",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code INVALID_PARAMETER', () => pm.expect(b.code).to.eql('INVALID_PARAMETER'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"X\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/not-a-uuid?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","not-a-uuid"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "04 · Messages – Create",
+      "description": "POST /api/v1/sessions/{sessionId}/messages — sender types, content validation, context field, ownership.",
+      "item": [
+        {
+          "name": "POST message – 201 USER sender no context",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('has id', () => pm.expect(b.id).to.be.a('string'));",
+                "pm.test('sender USER', () => pm.expect(b.sender).to.eql('USER'));",
+                "pm.test('content matches', () => pm.expect(b.content).to.eql('What is RAG?'));",
+                "pm.test('retrievedContext is null', () => pm.expect(b.retrievedContext).to.be.null);",
+                "pm.test('has sessionId', () => pm.expect(b.sessionId).to.eql(pm.collectionVariables.get('sessionId')));",
+                "pm.test('has createdAt', () => pm.expect(b.createdAt).to.be.a('string'));",
+                "pm.collectionVariables.set('messageId', b.id);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"USER\",\n  \"content\": \"What is RAG?\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST message – 201 ASSISTANT sender with retrievedContext",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('sender ASSISTANT', () => pm.expect(b.sender).to.eql('ASSISTANT'));",
+                "pm.test('retrievedContext not null', () => pm.expect(b.retrievedContext).to.be.a('string').and.not.empty);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"ASSISTANT\",\n  \"content\": \"RAG stands for Retrieval-Augmented Generation, combining search with generation.\",\n  \"retrievedContext\": \"Source chunk 1: RAG is a technique...\\n\\n---\\n\\nSource chunk 2: It was introduced in 2020...\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST message – 201 content with leading/trailing spaces → trimmed",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('content trimmed', () => pm.expect(b.content).to.eql('Trimmed content'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"USER\",\n  \"content\": \"  Trimmed content  \"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST message – 201 retrievedContext whitespace-only → stored as null",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('retrievedContext is null', () => pm.expect(b.retrievedContext).to.be.null);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"USER\",\n  \"content\": \"Hello\",\n  \"retrievedContext\": \"   \"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST message – 201 content exactly 10000 chars (boundary)",
+          "event": [
+            {
+              "listen": "preRequest",
+              "script": { "exec": [
+                "pm.variables.set('longContent', 'x'.repeat(10000));"
+              ]}
+            },
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('content length 10000', () => pm.expect(b.content.length).to.eql(10000));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"USER\",\n  \"content\": \"{{longContent}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST message – 400 content exceeds 10000 chars",
+          "event": [
+            {
+              "listen": "preRequest",
+              "script": { "exec": [
+                "pm.variables.set('tooLongContent', 'y'.repeat(10001));"
+              ]}
+            },
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code VALIDATION_ERROR', () => pm.expect(b.code).to.eql('VALIDATION_ERROR'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"USER\",\n  \"content\": \"{{tooLongContent}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST message – 400 content blank",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code VALIDATION_ERROR or BAD_REQUEST', () => pm.expect(['VALIDATION_ERROR','BAD_REQUEST']).to.include(b.code));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"USER\",\n  \"content\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST message – 400 content whitespace only",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"USER\",\n  \"content\": \"    \"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST message – 400 sender missing",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('message mentions sender', () => pm.expect(b.message).to.match(/sender/i));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"No sender here\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST message – 400 sender invalid enum value",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code INVALID_REQUEST_BODY', () => pm.expect(b.code).to.eql('INVALID_REQUEST_BODY'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"ROBOT\",\n  \"content\": \"Hello\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST message – 400 retrievedContext exceeds 20000 chars",
+          "event": [
+            {
+              "listen": "preRequest",
+              "script": { "exec": [
+                "pm.variables.set('hugeCtx', 'z'.repeat(20001));"
+              ]}
+            },
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"ASSISTANT\",\n  \"content\": \"Answer\",\n  \"retrievedContext\": \"{{hugeCtx}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST message – 404 session not owned by userId",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 404', () => pm.response.to.have.status(404));",
+                "const b = pm.response.json();",
+                "pm.test('code RESOURCE_NOT_FOUND', () => pm.expect(b.code).to.eql('RESOURCE_NOT_FOUND'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"USER\",\n  \"content\": \"Unauthorized message\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId=evil-actor",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "evil-actor" }]
+            }
+          }
+        },
+        {
+          "name": "POST message – 404 non-existent sessionId",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 404', () => pm.response.to.have.status(404));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"USER\",\n  \"content\": \"Hello ghost\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/00000000-0000-0000-0000-000000000000/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","00000000-0000-0000-0000-000000000000","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "05 · Messages – List",
+      "description": "GET /api/v1/sessions/{sessionId}/messages — pagination, ordering, and ownership.",
+      "item": [
+        {
+          "name": "GET messages – 200 default page",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('has content array', () => pm.expect(b.content).to.be.an('array'));",
+                "pm.test('messages ordered by createdAt ASC', () => {",
+                "  const times = b.content.map(m => new Date(m.createdAt).getTime());",
+                "  for (let i = 1; i < times.length; i++) pm.expect(times[i]).to.be.at.least(times[i-1]);",
+                "});",
+                "pm.test('each message has sessionId', () => {",
+                "  b.content.forEach(m => pm.expect(m.sessionId).to.eql(pm.collectionVariables.get('sessionId')));",
+                "});"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "GET messages – 200 page=0 size=1",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('at most 1 item', () => pm.expect(b.content.length).to.be.at.most(1));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}&page=0&size=1",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "page",   "value": "0" },
+                { "key": "size",   "value": "1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET messages – 200 size=100 (max boundary)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}&size=100",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "size",   "value": "100" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET messages – 200 page beyond last → empty list",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('content empty', () => pm.expect(b.content).to.be.an('array').that.is.empty);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}&page=999",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "page",   "value": "999" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET messages – 404 wrong owner",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 404', () => pm.response.to.have.status(404));",
+                "const b = pm.response.json();",
+                "pm.test('code RESOURCE_NOT_FOUND', () => pm.expect(b.code).to.eql('RESOURCE_NOT_FOUND'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId=hacker",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "hacker" }]
+            }
+          }
+        },
+        {
+          "name": "GET messages – 404 non-existent session",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 404', () => pm.response.to.have.status(404));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/00000000-0000-0000-0000-000000000000/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","00000000-0000-0000-0000-000000000000","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "GET messages – 400 userId missing",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"]
+            }
+          }
+        },
+        {
+          "name": "GET messages – 400 size=101 above max",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}&size=101",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "size",   "value": "101" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "06 · Sessions – Delete",
+      "description": "DELETE /api/v1/sessions/{sessionId} — cascade, ownership isolation, idempotency.",
+      "item": [
+        {
+          "name": "DELETE session – 204 happy path (cascades messages)",
+          "event": [
+            {
+              "listen": "preRequest",
+              "script": { "exec": [
+                "// Create a throw-away session to delete",
+                "const baseUrl = pm.collectionVariables.get('baseUrl');",
+                "const apiKey  = pm.collectionVariables.get('apiKey');",
+                "const userId  = pm.collectionVariables.get('userId');",
+                "pm.sendRequest({",
+                "  url: baseUrl + '/api/v1/sessions',",
+                "  method: 'POST',",
+                "  header: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },",
+                "  body: { mode: 'raw', raw: JSON.stringify({ userId, title: 'Temp Delete Me' }) }",
+                "}, (err, res) => {",
+                "  pm.collectionVariables.set('deleteSessionId', res.json().id);",
+                "});"
+              ]}
+            },
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 204', () => pm.response.to.have.status(204));",
+                "pm.test('body is empty', () => pm.expect(pm.response.text()).to.be.empty);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{deleteSessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{deleteSessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "DELETE session – 404 already deleted (idempotency check)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 404', () => pm.response.to.have.status(404));",
+                "const b = pm.response.json();",
+                "pm.test('code RESOURCE_NOT_FOUND', () => pm.expect(b.code).to.eql('RESOURCE_NOT_FOUND'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{deleteSessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{deleteSessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "DELETE session – 404 wrong owner cannot delete",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 404', () => pm.response.to.have.status(404));",
+                "const b = pm.response.json();",
+                "pm.test('code RESOURCE_NOT_FOUND', () => pm.expect(b.code).to.eql('RESOURCE_NOT_FOUND'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}?userId=wrong-owner",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}"],
+              "query": [{ "key": "userId", "value": "wrong-owner" }]
+            }
+          }
+        },
+        {
+          "name": "DELETE session – 404 non-existent UUID",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 404', () => pm.response.to.have.status(404));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/00000000-0000-0000-0000-000000000000?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","00000000-0000-0000-0000-000000000000"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "DELETE session – 400 invalid UUID in path",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 400', () => pm.response.to.have.status(400));",
+                "const b = pm.response.json();",
+                "pm.test('code INVALID_PARAMETER', () => pm.expect(b.code).to.eql('INVALID_PARAMETER'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/not-a-uuid?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","not-a-uuid"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "DELETE session – verify messages also deleted (cascade)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "// After the session was deleted in the happy-path test,",
+                "// GETting its messages must return 404, not 200 with empty list.",
+                "pm.test('status 404 – session gone', () => pm.response.to.have.status(404));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{deleteSessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{deleteSessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "07 · Security",
+      "description": "Authentication edge cases — header casing, empty value, whitespace, SQL/header injection attempts.",
+      "item": [
+        {
+          "name": "GET sessions – 401 X-API-Key header empty string",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 401', () => pm.response.to.have.status(401));"
+              ]}
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "GET sessions – 401 X-API-Key whitespace only",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 401', () => pm.response.to.have.status(401));"
+              ]}
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "   " }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "GET sessions – 401 wrong key (timing-safe compare)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 401', () => pm.response.to.have.status(401));",
+                "const b = pm.response.json();",
+                "pm.test('code UNAUTHORIZED', () => pm.expect(b.code).to.eql('UNAUTHORIZED'));",
+                "pm.test('no information leakage in message', () => {",
+                "  pm.expect(b.message).to.not.include('change-me');",
+                "  pm.expect(b.message).to.not.include('api-key');",
+                "});"
+              ]}
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "change-m" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST session – userId SQL injection attempt",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "// Should either create a session with the literal string or return 400.",
+                "// Must NOT return 500 (no SQL injection leakage).",
+                "pm.test('not 500', () => pm.response.to.not.have.status(500));",
+                "if (pm.response.code === 201) {",
+                "  const b = pm.response.json();",
+                "  pm.test('userId stored as literal', () => pm.expect(b.userId).to.eql(\"'; DROP TABLE chat_sessions; --\"));",
+                "}"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"'; DROP TABLE chat_sessions; --\",\n  \"title\": \"Injection Test\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "POST message – XSS in content stored verbatim",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('not 500', () => pm.response.to.not.have.status(500));",
+                "if (pm.response.code === 201) {",
+                "  const b = pm.response.json();",
+                "  pm.test('content stored verbatim', () => pm.expect(b.content).to.eql('<script>alert(1)</script>'));",
+                "}"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"USER\",\n  \"content\": \"<script>alert(1)</script>\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{sessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "CORS preflight OPTIONS – 200 allowed",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));"
+              ]}
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "OPTIONS",
+            "header": [
+              { "key": "Origin", "value": "http://localhost:3000" },
+              { "key": "Access-Control-Request-Method", "value": "POST" },
+              { "key": "Access-Control-Request-Headers", "value": "X-API-Key,Content-Type" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "08 · Rate Limit",
+      "description": "Verify X-Rate-Limit-* headers are present and that 429 is returned once the bucket is exhausted. Uses a dedicated API key so it doesn't interfere with other tests.",
+      "item": [
+        {
+          "name": "Single request – rate limit headers present",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "pm.test('X-Rate-Limit-Limit header present', () =>",
+                "  pm.expect(pm.response.headers.get('X-Rate-Limit-Limit')).to.exist);",
+                "pm.test('X-Rate-Limit-Remaining header present', () =>",
+                "  pm.expect(pm.response.headers.get('X-Rate-Limit-Remaining')).to.exist);",
+                "pm.test('remaining is numeric', () => {",
+                "  const rem = parseInt(pm.response.headers.get('X-Rate-Limit-Remaining'), 10);",
+                "  pm.expect(rem).to.be.a('number').and.at.least(0);",
+                "});"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Remaining decrements on each call",
+          "event": [
+            {
+              "listen": "preRequest",
+              "script": { "exec": [
+                "// Make a baseline call and capture remaining",
+                "const baseUrl = pm.collectionVariables.get('baseUrl');",
+                "const apiKey  = pm.collectionVariables.get('apiKey');",
+                "const userId  = pm.collectionVariables.get('userId');",
+                "pm.sendRequest({",
+                "  url: `${baseUrl}/api/v1/sessions?userId=${userId}`,",
+                "  method: 'GET',",
+                "  header: { 'X-API-Key': apiKey }",
+                "}, (err, res) => {",
+                "  const rem = parseInt(res.headers.get('X-Rate-Limit-Remaining'), 10);",
+                "  pm.collectionVariables.set('baselineRemaining', rem);",
+                "});"
+              ]}
+            },
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "const baseline = parseInt(pm.collectionVariables.get('baselineRemaining'), 10);",
+                "const current  = parseInt(pm.response.headers.get('X-Rate-Limit-Remaining'), 10);",
+                "pm.test('remaining decremented by 1', () => pm.expect(current).to.eql(baseline - 1));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "09 · Static UI & Swagger",
+      "description": "Confirm the UI and API docs are reachable without an API key.",
+      "item": [
+        {
+          "name": "GET / – 200 serves index.html",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "pm.test('content-type html', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html'));",
+                "pm.test('contains RAG Chat Storage', () => pm.expect(pm.response.text()).to.include('RAG'));"
+              ]}
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/", "host": ["{{baseUrl}}"], "path": [""] }
+          }
+        },
+        {
+          "name": "GET /swagger-ui.html – 200 redirects to Swagger UI",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('2xx or 3xx response', () => pm.expect(pm.response.code).to.be.within(200, 399));"
+              ]}
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/swagger-ui.html", "host": ["{{baseUrl}}"], "path": ["swagger-ui.html"] }
+          }
+        },
+        {
+          "name": "GET /v3/api-docs – 200 OpenAPI spec",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('openapi field present', () => pm.expect(b).to.have.property('openapi'));",
+                "pm.test('info title present', () => pm.expect(b.info).to.have.property('title'));"
+              ]}
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/v3/api-docs", "host": ["{{baseUrl}}"], "path": ["v3","api-docs"] }
+          }
+        },
+        {
+          "name": "GET unknown route – 404 structured error",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 404', () => pm.response.to.have.status(404));",
+                "const b = pm.response.json();",
+                "pm.test('code RESOURCE_NOT_FOUND', () => pm.expect(b.code).to.eql('RESOURCE_NOT_FOUND'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/does-not-exist", "host": ["{{baseUrl}}"], "path": ["api","v1","does-not-exist"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "10 · End-to-End Flow",
+      "description": "Full lifecycle: create session → add USER message → add ASSISTANT reply with context → list messages → rename → favorite → verify list filter → delete → confirm gone.",
+      "item": [
+        {
+          "name": "E2E 1 – Create session",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "pm.collectionVariables.set('e2eSessionId', pm.response.json().id);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"title\": \"E2E Test Session\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/sessions", "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"] }
+          }
+        },
+        {
+          "name": "E2E 2 – Add USER question",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('sender USER', () => pm.expect(b.sender).to.eql('USER'));",
+                "pm.collectionVariables.set('e2eMsg1Id', b.id);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"USER\",\n  \"content\": \"Explain vector databases in simple terms.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{e2eSessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{e2eSessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "E2E 3 – Add ASSISTANT reply with RAG context",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 201', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('sender ASSISTANT', () => pm.expect(b.sender).to.eql('ASSISTANT'));",
+                "pm.test('retrievedContext stored', () => pm.expect(b.retrievedContext).to.be.a('string'));",
+                "pm.collectionVariables.set('e2eMsg2Id', b.id);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"ASSISTANT\",\n  \"content\": \"A vector database stores high-dimensional embeddings and enables similarity search.\",\n  \"retrievedContext\": \"Chunk 1: Vector databases are specialized stores...\\n\\n---\\n\\nChunk 2: They power semantic search...\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{e2eSessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{e2eSessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "E2E 4 – List messages, verify order and count",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('exactly 2 messages', () => pm.expect(b.totalElements).to.eql(2));",
+                "pm.test('USER comes first (ASC order)', () => pm.expect(b.content[0].sender).to.eql('USER'));",
+                "pm.test('ASSISTANT comes second', () => pm.expect(b.content[1].sender).to.eql('ASSISTANT'));",
+                "pm.test('second message has retrievedContext', () => pm.expect(b.content[1].retrievedContext).to.be.a('string'));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{e2eSessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{e2eSessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "E2E 5 – Rename session, verify updatedAt advances",
+          "event": [
+            {
+              "listen": "preRequest",
+              "script": { "exec": [
+                "pm.collectionVariables.set('e2eUpdatedBefore', new Date().toISOString());"
+              ]}
+            },
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('title renamed', () => pm.expect(b.title).to.eql('E2E Renamed'));",
+                "const before = new Date(pm.collectionVariables.get('e2eUpdatedBefore')).getTime();",
+                "const after  = new Date(b.updatedAt).getTime();",
+                "pm.test('updatedAt is recent', () => pm.expect(after).to.be.at.least(before - 2000));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"E2E Renamed\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{e2eSessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{e2eSessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "E2E 6 – Mark as favorite",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "pm.test('favorite true', () => pm.expect(pm.response.json().favorite).to.be.true);",
+                "pm.test('messageCount still 2', () => pm.expect(pm.response.json().messageCount).to.eql(2));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"favorite\": true\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{e2eSessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{e2eSessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "E2E 7 – List with favorite=true contains our session",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "const e2eId = pm.collectionVariables.get('e2eSessionId');",
+                "const found = b.content.some(s => s.id === e2eId && s.favorite === true);",
+                "pm.test('e2e session appears in favorites list', () => pm.expect(found).to.be.true);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}&favorite=true",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "favorite", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "E2E 8 – Delete session",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 204', () => pm.response.to.have.status(204));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{e2eSessionId}}?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{e2eSessionId}}"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "E2E 9 – Session no longer in list",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "const e2eId = pm.collectionVariables.get('e2eSessionId');",
+                "const found = b.content.some(s => s.id === e2eId);",
+                "pm.test('deleted session not in list', () => pm.expect(found).to.be.false);"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "E2E 10 – Messages return 404 after session deletion (cascade verified)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('status 404', () => pm.response.to.have.status(404));"
+              ]}
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sessions/{{e2eSessionId}}/messages?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","sessions","{{e2eSessionId}}","messages"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        }
+      ]
+    }
+
+  ]
+}
